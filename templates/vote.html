@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Vote</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <h2>Cast Your Vote</h2>
+  <form action="/vote" method="post" enctype="multipart/form-data">
+    <input type="text" name="voter_id" placeholder="Voter ID" required><br>
+    <label>Upload Face:</label>
+    <input type="file" name="image" accept="image/*" required><br>
+    <select name="candidate">
+      <option value="Candidate A">Candidate A</option>
+      <option value="Candidate B">Candidate B</option>
+      <option value="Candidate C">Candidate C</option>
+    </select><br>
+    <button type="submit">Submit Vote</button>
+  </form>
+</body>
+</html>

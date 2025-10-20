@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Results</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <h2>Voting Results</h2>
+  <ul>
+    {% for candidate, votes in results.items() %}
+      <li>{{ candidate }} — {{ votes }} votes</li>
+    {% endfor %}
+  </ul>
+  <a href="/">Back</a>
+</body>
+</html>
