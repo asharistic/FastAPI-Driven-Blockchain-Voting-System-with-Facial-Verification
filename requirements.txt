@@ -1,8 +1,0 @@
-fastapi
-uvicorn
-face-recognition
-opencv-python
-web3
-python-multipart
-cmake
-dlib
