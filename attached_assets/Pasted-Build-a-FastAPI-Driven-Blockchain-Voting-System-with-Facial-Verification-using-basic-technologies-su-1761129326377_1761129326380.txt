@@ -1,0 +1,96 @@
+Build a FastAPI-Driven Blockchain Voting System with Facial Verification using basic technologies suitable for a university final year project.
+
+🧩 Project Requirements
+
+Backend Framework: FastAPI (Python)
+
+Database: SQLite (use SQLAlchemy or sqlite3)
+
+Facial Recognition: OpenCV + face_recognition library
+
+Blockchain: A simple custom Python blockchain to store votes securely
+
+Frontend: Basic HTML, CSS, and JavaScript templates (use Jinja2)
+
+Server Port: Runs on http://localhost:8000
+
+⚙️ Core Features
+
+Voter Registration:
+
+Register a voter with name, ID, and captured face.
+
+Save the face encoding in the database.
+
+Face Verification:
+
+Before voting, the voter’s face is verified using a webcam snapshot.
+
+Voting Process:
+
+Verified voters can cast a vote for a candidate.
+
+Each vote is stored as a block in a simple blockchain (with hash, timestamp, and voter ID).
+
+Admin Dashboard:
+
+View all voters and candidates.
+
+Display blockchain records (blocks, timestamps, previous hash).
+
+Show total votes per candidate.
+
+🧱 Project Structure
+backend/
+├── main.py              # FastAPI app entry point
+├── models.py            # Database models
+├── database.py          # SQLite connection
+├── blockchain.py        # Simple blockchain logic
+├── face_utils.py        # Face registration & verification
+├── routes/
+│   ├── voters.py        # Register/verify voters
+│   ├── votes.py         # Voting logic
+│   ├── admin.py         # Dashboard & blockchain APIs
+├── templates/           # HTML pages (Jinja2)
+├── static/              # CSS/JS files
+└── database.db          # SQLite database file
+
+📡 API Endpoints
+
+POST /api/register → Register voter and save face encoding
+
+POST /api/verify-face → Verify voter face before voting
+
+POST /api/vote → Cast vote (adds to blockchain)
+
+GET /api/chain → View blockchain data
+
+GET /api/results → Get total votes per candidate
+
+🧰 Dependencies
+fastapi
+uvicorn
+sqlalchemy
+opencv-python
+face_recognition
+jinja2
+
+🧠 Expected Output
+
+A running FastAPI app on Replit that:
+
+Lets voters register and verify using face recognition
+
+Allows secure voting through blockchain
+
+Displays results and blockchain in admin dashboard
+
+Instructions for AI:
+Generate the full working project code with clear comments.
+Include example data and step-by-step setup instructions (how to run in Replit).
+Make sure the code runs locally using:
+
+uvicorn main:app --reload
+
+
+Use only simple Python, HTML, and CSS — no advanced frameworks like React or Docker.
