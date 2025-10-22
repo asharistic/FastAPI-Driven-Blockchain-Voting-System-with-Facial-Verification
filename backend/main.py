@@ -8,14 +8,14 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from backend.database import init_db, get_db
 from backend.models import Candidate
-from backend.routes import voters, votes, admin
+from backend.routes import voters, votes, admin, auth, admin_enhanced
 from sqlalchemy.orm import Session
 
 # Initialize FastAPI app
 app = FastAPI(
     title="Blockchain Voting System",
     description="Secure voting system with facial verification and blockchain",
-    version="1.0.0"
+    version="2.0.0"
 )
 
 # Mount static files
@@ -28,6 +28,8 @@ templates = Jinja2Templates(directory="backend/templates")
 app.include_router(voters.router)
 app.include_router(votes.router)
 app.include_router(admin.router)
+app.include_router(auth.router)
+app.include_router(admin_enhanced.router)
 
 
 # Initialize database and add sample data
@@ -79,9 +81,21 @@ async def vote_page(request: Request):
     return templates.TemplateResponse("vote.html", {"request": request})
 
 
+@app.get("/admin/login", response_class=HTMLResponse)
+async def admin_login_page(request: Request):
+    """Admin login page"""
+    return templates.TemplateResponse("admin_login.html", {"request": request})
+
+
 @app.get("/admin", response_class=HTMLResponse)
-async def admin_page(request: Request):
-    """Admin dashboard page"""
+async def admin_dashboard_page(request: Request):
+    """Admin dashboard page (3D)"""
+    return templates.TemplateResponse("admin_dashboard_3d.html", {"request": request})
+
+
+@app.get("/admin/old", response_class=HTMLResponse)
+async def admin_page_old(request: Request):
+    """Old admin dashboard page"""
     return templates.TemplateResponse("admin.html", {"request": request})
 
 
