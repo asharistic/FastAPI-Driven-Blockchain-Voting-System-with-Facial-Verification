@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vote - Blockchain Voting System</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🗳️ Blockchain Voting System</h1>
+            <p class="subtitle">Secure voting with facial verification</p>
+        </header>
+
+        <nav class="nav-menu">
+            <a href="/" class="nav-link">Home</a>
+            <a href="/register" class="nav-link">Register</a>
+            <a href="/vote" class="nav-link active">Vote</a>
+            <a href="/admin" class="nav-link">Admin Dashboard</a>
+        </nav>
+
+        <main class="content">
+            <div class="form-section">
+                <div id="verificationSection">
+                    <h2>Face Verification</h2>
+                    <p>Verify your identity before voting</p>
+
+                    <form id="verificationForm" class="voter-form">
+                        <div class="form-group">
+                            <label for="voterId">Voter ID</label>
+                            <input type="text" id="voterId" required placeholder="Enter your voter ID">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Face Verification</label>
+                            <div class="camera-section">
+                                <video id="video" autoplay></video>
+                                <canvas id="canvas" style="display: none;"></canvas>
+                                <div id="capturedImage" class="captured-image" style="display: none;">
+                                    <img id="photoPreview" alt="Captured photo">
+                                </div>
+                            </div>
+                            <div class="camera-controls">
+                                <button type="button" id="startCamera" class="btn btn-secondary">Start Camera</button>
+                                <button type="button" id="capturePhoto" class="btn btn-secondary" style="display: none;">Capture Photo</button>
+                                <button type="button" id="retakePhoto" class="btn btn-secondary" style="display: none;">Retake Photo</button>
+                            </div>
+                        </div>
+
+                        <div id="message" class="message"></div>
+
+                        <button type="submit" class="btn btn-primary">Verify Identity</button>
+                    </form>
+                </div>
+
+                <div id="votingSection" style="display: none;">
+                    <h2>Cast Your Vote</h2>
+                    <p>Welcome, <strong id="voterName"></strong>! Select your candidate:</p>
+
+                    <div id="candidatesList" class="candidates-list">
+                        <!-- Candidates will be loaded here -->
+                    </div>
+
+                    <div id="voteMessage" class="message"></div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Blockchain Voting System &copy; 2025 | Final Year Project</p>
+        </footer>
+    </div>
+
+    <script src="/static/js/vote.js"></script>
+</body>
+</html>
