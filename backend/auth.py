@@ -14,8 +14,9 @@ SECRET_KEY = "your-secret-key-change-in-production-09876543210"  # Change this i
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Password hashing - using pbkdf2_sha256 instead of bcrypt to avoid compatibility issues
+# This is still secure and suitable for production with proper configuration
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 # HTTP Bearer for JWT tokens
 security = HTTPBearer()
@@ -36,10 +37,10 @@ class Token(BaseModel):
 
 
 # Default admin credentials (in production, store in database)
+# Pre-computed pbkdf2_sha256 hash for "admin123"
 DEFAULT_ADMIN = {
     "username": "admin",
-    "password": "admin123",  # Change this in production!
-    "hashed_password": None  # Will be set on first use
+    "hashed_password": "$pbkdf2-sha256$29000$utdaC8F4zznHWCslBCBEiA$EgfZYglcii3ye/k/gmq4gcNBKc.gzLvTMMvchnNk7iU"  # hash of "admin123"
 }
 
 
@@ -49,7 +50,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def get_password_hash(password: str) -> str:
-    """Hash a password"""
+    """Hash a password using pbkdf2_sha256"""
     return pwd_context.hash(password)
 
 
@@ -85,11 +86,8 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) 
 
 def authenticate_admin(username: str, password: str) -> bool:
     """Authenticate admin credentials"""
-    # In production, check against database
-    # For now, use default credentials
-    if DEFAULT_ADMIN["hashed_password"] is None:
-        DEFAULT_ADMIN["hashed_password"] = get_password_hash(DEFAULT_ADMIN["password"])
-    
+    # In production, check against database with proper password hashing
+    # Using pbkdf2_sha256 for secure password verification
     if username == DEFAULT_ADMIN["username"]:
         return verify_password(password, DEFAULT_ADMIN["hashed_password"])
     return False
