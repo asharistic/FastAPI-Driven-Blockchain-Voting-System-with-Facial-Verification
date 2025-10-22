@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Blockchain Voting System</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🗳️ Blockchain Voting System</h1>
+            <p class="subtitle">Admin Dashboard</p>
+        </header>
+
+        <nav class="nav-menu">
+            <a href="/" class="nav-link">Home</a>
+            <a href="/register" class="nav-link">Register</a>
+            <a href="/vote" class="nav-link">Vote</a>
+            <a href="/admin" class="nav-link active">Admin Dashboard</a>
+        </nav>
+
+        <main class="content">
+            <div class="dashboard">
+                <h2>Voting Results</h2>
+                <div class="stats-cards">
+                    <div class="stat-card">
+                        <h3 id="totalVotes">0</h3>
+                        <p>Total Votes</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3 id="totalVoters">0</h3>
+                        <p>Registered Voters</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3 id="totalCandidates">0</h3>
+                        <p>Candidates</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3 id="blockchainLength">0</h3>
+                        <p>Blockchain Blocks</p>
+                    </div>
+                </div>
+
+                <div class="results-section">
+                    <h3>Candidate Results</h3>
+                    <div id="resultsTable"></div>
+                </div>
+
+                <div class="voters-section">
+                    <h3>Registered Voters</h3>
+                    <div id="votersTable"></div>
+                </div>
+
+                <div class="blockchain-section">
+                    <h3>Blockchain Explorer</h3>
+                    <div class="blockchain-status">
+                        <span>Blockchain Status: <strong id="blockchainStatus">Loading...</strong></span>
+                    </div>
+                    <div id="blockchainData" class="blockchain-blocks"></div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Blockchain Voting System &copy; 2025 | Final Year Project</p>
+        </footer>
+    </div>
+
+    <script src="/static/js/admin.js"></script>
+</body>
+</html>
