@@ -199,11 +199,11 @@ The system comes pre-loaded with 4 sample candidates:
 
 This project is designed for educational purposes and demonstrates:
 - FastAPI web framework development
-- Database design with SQLAlchemy
+- Database design with SQLite3
 - Blockchain implementation in Python
 - Face detection with OpenCV
 - RESTful API design
-- Frontend integration with vanilla JavaScript
+- Frontend integration with React with Vite 18
 - Secure voting system architecture
 
 ## 📝 Notes
