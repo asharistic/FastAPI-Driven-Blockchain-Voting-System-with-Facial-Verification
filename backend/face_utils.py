@@ -9,6 +9,14 @@ from PIL import Image
 
 # Load the pre-trained Haar Cascade classifier for face detection
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+# Additional cascade for profile face detection (to reject profile faces)
+# Try to load profile cascade, but continue if not available
+try:
+    profile_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_profileface.xml')
+    PROFILE_CASCADE_AVAILABLE = profile_cascade.empty() == False
+except:
+    PROFILE_CASCADE_AVAILABLE = False
+    profile_cascade = None
 
 def base64_to_image(base64_string: str) -> np.ndarray:
     """Convert base64 string to OpenCV image"""
@@ -31,46 +39,154 @@ def base64_to_image(base64_string: str) -> np.ndarray:
         raise ValueError(f"Error converting base64 to image: {str(e)}")
 
 
+def validate_frontal_face(image: np.ndarray, face_rect: tuple) -> bool:
+    """
+    Validate that the detected face is frontal (not profile/side view)
+    Returns True if face appears to be frontal
+    """
+    (x, y, w, h) = face_rect
+    img_height, img_width = image.shape[:2]
+    
+    # 1. Check aspect ratio - frontal faces should be roughly square (width/height between 0.7 and 1.3)
+    aspect_ratio = w / h
+    if aspect_ratio < 0.7 or aspect_ratio > 1.3:
+        return False
+    
+    # 2. Check face size relative to image - should be reasonably sized (not too small)
+    face_area = w * h
+    image_area = img_width * img_height
+    face_ratio = face_area / image_area
+    if face_ratio < 0.05:  # Face should be at least 5% of image
+        return False
+    
+    # 3. Check face position - should be reasonably centered (not too far to edges)
+    center_x = x + w / 2
+    center_y = y + h / 2
+    margin_x = img_width * 0.15  # 15% margin from edges
+    margin_y = img_height * 0.15
+    
+    if center_x < margin_x or center_x > (img_width - margin_x):
+        return False
+    if center_y < margin_y or center_y > (img_height - margin_y):
+        return False
+    
+    # Convert to grayscale for detection checks
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    
+    # 4. Check for profile face - if profile cascade detects the face, reject it
+    if PROFILE_CASCADE_AVAILABLE and profile_cascade is not None:
+        # Expand search region slightly around detected face
+        expanded_x = max(0, x - w // 4)
+        expanded_y = max(0, y - h // 4)
+        expanded_w = min(img_width - expanded_x, w + w // 2)
+        expanded_h = min(img_height - expanded_y, h + h // 2)
+        
+        roi = gray[expanded_y:expanded_y+expanded_h, expanded_x:expanded_x+expanded_w]
+        
+        if roi.size > 0:
+            # Detect profile faces in the region
+            profile_faces = profile_cascade.detectMultiScale(
+                roi,
+                scaleFactor=1.1,
+                minNeighbors=3,
+                minSize=(max(20, w // 2), max(20, h // 2))
+            )
+            
+            # If profile face is detected with high confidence, reject
+            if len(profile_faces) > 0:
+                # Check if profile face overlaps significantly with frontal face
+                for (px, py, pw, ph) in profile_faces:
+                    # Adjust coordinates to image space
+                    px += expanded_x
+                    py += expanded_y
+                    # Calculate overlap
+                    overlap_x = max(0, min(x + w, px + pw) - max(x, px))
+                    overlap_y = max(0, min(y + h, py + ph) - max(y, py))
+                    overlap_area = overlap_x * overlap_y
+                    face_area = w * h
+                    if overlap_area > face_area * 0.5:  # More than 50% overlap
+                        return False
+    
+    # 5. Additional check: Use stricter frontal face detection parameters
+    # This ensures we only accept well-detected frontal faces
+    strict_faces = face_cascade.detectMultiScale(
+        gray,
+        scaleFactor=1.15,  # Slightly stricter
+        minNeighbors=7,     # Require more neighbors (more confident detection)
+        minSize=(max(50, w - 10), max(50, h - 10)),  # Ensure face size is consistent
+        flags=cv2.CASCADE_SCALE_IMAGE
+    )
+    
+    # Check if the detected face matches our strict detection
+    for (sx, sy, sw, sh) in strict_faces:
+        # Check if rectangles overlap significantly
+        overlap_x = max(0, min(x + w, sx + sw) - max(x, sx))
+        overlap_y = max(0, min(y + h, sy + sh) - max(y, sy))
+        overlap_area = overlap_x * overlap_y
+        min_area = min(w * h, sw * sh)
+        if overlap_area > min_area * 0.7:  # 70% overlap
+            return True
+    
+    # If we get here, the face didn't pass strict detection
+    return False
+
+
 def detect_face(image: np.ndarray) -> bool:
     """
-    Detect if a face is present in the image
-    Returns True if at least one face is detected
+    Detect if a frontal face is present in the image
+    Returns True if at least one valid frontal face is detected
     """
     # Convert to grayscale for face detection
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     
-    # Detect faces
+    # Detect faces with standard parameters
     faces = face_cascade.detectMultiScale(
         gray,
         scaleFactor=1.1,
         minNeighbors=5,
-        minSize=(30, 30)
+        minSize=(50, 50)  # Increased minimum size for better quality
     )
     
-    return len(faces) > 0
+    # Validate each detected face is frontal
+    for face in faces:
+        if validate_frontal_face(image, face):
+            return True
+    
+    return False
 
 
 def extract_face_region(image: np.ndarray) -> np.ndarray:
     """
     Extract the face region from the image
     Returns the face region as a numpy array
+    Validates that the face is frontal before extraction
     """
     # Convert to grayscale for face detection
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     
-    # Detect faces
+    # Detect faces with stricter parameters
     faces = face_cascade.detectMultiScale(
         gray,
         scaleFactor=1.1,
         minNeighbors=5,
-        minSize=(30, 30)
+        minSize=(50, 50)  # Increased minimum size
     )
     
     if len(faces) == 0:
-        raise ValueError("No face detected in the image")
+        raise ValueError("No face detected in the image. Please ensure your face is clearly visible and facing the camera.")
     
-    # Get the first (largest) face
-    (x, y, w, h) = faces[0]
+    # Find the first valid frontal face
+    valid_face = None
+    for face in faces:
+        if validate_frontal_face(image, face):
+            valid_face = face
+            break
+    
+    if valid_face is None:
+        raise ValueError("No frontal face detected. Please face the camera directly and ensure both eyes are visible. Side/profile poses are not accepted.")
+    
+    # Get the valid face
+    (x, y, w, h) = valid_face
     
     # Extract face region
     face_region = image[y:y+h, x:x+w]

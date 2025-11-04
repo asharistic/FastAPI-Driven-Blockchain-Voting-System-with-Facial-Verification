@@ -38,11 +38,11 @@ async def register_voter(voter_data: VoterRegistration):
         # Convert base64 to image
         image = base64_to_image(voter_data.face_image)
         
-        # Check if face is detected
+        # Check if frontal face is detected
         if not detect_face(image):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No face detected in the image. Please ensure your face is clearly visible."
+                detail="No frontal face detected. Please face the camera directly with both eyes clearly visible. Side/profile poses are not accepted."
             )
         
         # Check for duplicate face (prevent same person registering with different ID/name)
@@ -106,11 +106,11 @@ async def verify_face(verification_data: FaceVerification):
         # Convert base64 to image
         image = base64_to_image(verification_data.face_image)
         
-        # Check if face is detected
+        # Check if frontal face is detected
         if not detect_face(image):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No face detected. Please ensure your face is clearly visible."
+                detail="No frontal face detected. Please face the camera directly with both eyes clearly visible. Side/profile poses are not accepted."
             )
         
         # Debug: inspect voter object shape
