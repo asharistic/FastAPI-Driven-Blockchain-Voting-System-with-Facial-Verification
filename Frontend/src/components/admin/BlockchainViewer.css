@@ -1,0 +1,145 @@
+.blockchain-viewer {
+  padding: 2rem 0;
+}
+
+.blockchain-viewer h2 {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--gold);
+  margin-bottom: 2rem;
+}
+
+.blockchain-status {
+  display: flex;
+  gap: 2rem;
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+}
+
+.status-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.status-label {
+  color: var(--text-light);
+  font-size: 0.875rem;
+}
+
+.status-value {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--gold);
+}
+
+.status-value.valid {
+  color: #10b981;
+}
+
+.status-value.invalid {
+  color: #ef4444;
+}
+
+.blocks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.block-card {
+  padding: 2rem;
+}
+
+.block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.block-header h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.block-time {
+  color: var(--text-light);
+  font-size: 0.875rem;
+}
+
+.block-data-section {
+  margin-bottom: 1.5rem;
+}
+
+.data-label {
+  color: var(--text-light);
+  font-size: 0.875rem;
+  margin-bottom: 0.5rem;
+}
+
+.block-data {
+  background: rgba(0, 0, 0, 0.5);
+  padding: 1rem;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  color: var(--text-light);
+  overflow-x: auto;
+  font-family: 'Courier New', monospace;
+}
+
+.block-hashes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.hash-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.hash-label {
+  color: var(--text-light);
+  font-size: 0.875rem;
+}
+
+.hash-value {
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+  color: var(--gold-accent);
+  word-break: break-all;
+  background: rgba(212, 175, 55, 0.1);
+  padding: 0.5rem;
+  border-radius: 4px;
+  border: 1px solid rgba(212, 175, 55, 0.2);
+}
+
+.hash-value.previous {
+  color: var(--gold);
+}
+
+.loading-state,
+.empty-state {
+  text-align: center;
+  padding: 4rem;
+  color: var(--text-light);
+}
+
+@media (max-width: 768px) {
+  .block-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  .blockchain-status {
+    flex-direction: column;
+    gap: 1rem;
+  }
+}
+

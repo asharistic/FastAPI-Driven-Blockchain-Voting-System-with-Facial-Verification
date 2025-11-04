@@ -135,3 +135,49 @@ def save_face_data(image: np.ndarray) -> bytes:
         raise ValueError("Failed to encode face image")
     
     return encoded_image.tobytes()
+
+
+def check_duplicate_face(new_face_image: np.ndarray, existing_voters: list[dict], threshold: float = 0.6) -> dict | None:
+    """
+    Check if the new face matches any existing registered face
+    Returns the matching voter dict if found, None otherwise
+    """
+    try:
+        new_face = extract_face_region(new_face_image)
+        new_face_resized = cv2.resize(new_face, (100, 100))
+        new_face_gray = cv2.cvtColor(new_face_resized, cv2.COLOR_BGR2GRAY)
+        new_hist = cv2.calcHist([new_face_gray], [0], None, [256], [0, 256])
+        new_hist = cv2.normalize(new_hist, new_hist).flatten()
+        
+        for voter in existing_voters:
+            if not voter.get("face_data"):
+                continue
+                
+            try:
+                stored_bytes = voter["face_data"]
+                stored_array = np.frombuffer(stored_bytes, dtype=np.uint8)
+                stored_image = cv2.imdecode(stored_array, cv2.IMREAD_COLOR)
+                
+                if stored_image is None:
+                    continue
+                
+                stored_face_resized = cv2.resize(stored_image, (100, 100))
+                stored_face_gray = cv2.cvtColor(stored_face_resized, cv2.COLOR_BGR2GRAY)
+                stored_hist = cv2.calcHist([stored_face_gray], [0], None, [256], [0, 256])
+                stored_hist = cv2.normalize(stored_hist, stored_hist).flatten()
+                
+                # Calculate similarity
+                similarity = cv2.compareHist(new_hist, stored_hist, cv2.HISTCMP_CORREL)
+                
+                if similarity >= threshold:
+                    return voter
+                    
+            except Exception as e:
+                print(f"Error comparing with voter {voter.get('voter_id')}: {str(e)}")
+                continue
+        
+        return None
+        
+    except Exception as e:
+        print(f"Error in check_duplicate_face: {str(e)}")
+        return None

@@ -2,14 +2,14 @@
 FastAPI Blockchain Voting System with Facial Verification
 Main application entry point
 """
-from fastapi import FastAPI, Request
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
-from backend.database import init_db, get_db
-from backend.models import Candidate
+from fastapi import FastAPI
+# from fastapi.staticfiles import StaticFiles
+# from fastapi.templating import Jinja2Templates
+# from fastapi.responses import HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
+from backend.database import init_db
+from backend import database as db
 from backend.routes import voters, votes, admin, auth, admin_enhanced
-from sqlalchemy.orm import Session
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -18,11 +18,20 @@ app = FastAPI(
     version="2.0.0"
 )
 
-# Mount static files
-app.mount("/static", StaticFiles(directory="backend/static"), name="static")
+# Configure CORS to allow React frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],  # React dev server
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# Setup templates
-templates = Jinja2Templates(directory="backend/templates")
+# Mount static files (kept for potential future use)
+# app.mount("/static", StaticFiles(directory="backend/static"), name="static")
+
+# Setup templates (not used - React frontend handles UI)
+# templates = Jinja2Templates(directory="backend/templates")
 
 # Include routers
 app.include_router(voters.router)
@@ -40,63 +49,26 @@ async def startup_event():
     init_db()
     
     # Add sample candidates if none exist
-    db = next(get_db())
     try:
-        existing_candidates = db.query(Candidate).count()
+        existing_candidates = len(db.list_candidates())
         if existing_candidates == 0:
             sample_candidates = [
-                Candidate(candidate_id="C001", name="Alice Johnson", party="Progressive Party"),
-                Candidate(candidate_id="C002", name="Bob Smith", party="Democratic Alliance"),
-                Candidate(candidate_id="C003", name="Carol Williams", party="Independent"),
-                Candidate(candidate_id="C004", name="David Brown", party="Green Party"),
+                {"candidate_id": "C001", "name": "Alice Johnson", "party": "Progressive Party"},
+                {"candidate_id": "C002", "name": "Bob Smith", "party": "Democratic Alliance"},
+                {"candidate_id": "C003", "name": "Carol Williams", "party": "Independent"},
+                {"candidate_id": "C004", "name": "David Brown", "party": "Green Party"},
             ]
-            db.add_all(sample_candidates)
-            db.commit()
+            for c in sample_candidates:
+                db.create_candidate(c)
             print("Sample candidates added to database")
         else:
             print(f"Database already contains {existing_candidates} candidates")
     except Exception as e:
         print(f"Error initializing candidates: {str(e)}")
-        db.rollback()
-    finally:
-        db.close()
 
 
-# Frontend routes
-@app.get("/", response_class=HTMLResponse)
-async def home(request: Request):
-    """Home page"""
-    return templates.TemplateResponse("index.html", {"request": request})
-
-
-@app.get("/register", response_class=HTMLResponse)
-async def register_page(request: Request):
-    """Voter registration page"""
-    return templates.TemplateResponse("register.html", {"request": request})
-
-
-@app.get("/vote", response_class=HTMLResponse)
-async def vote_page(request: Request):
-    """Voting page"""
-    return templates.TemplateResponse("vote.html", {"request": request})
-
-
-@app.get("/admin/login", response_class=HTMLResponse)
-async def admin_login_page(request: Request):
-    """Admin login page"""
-    return templates.TemplateResponse("admin_login.html", {"request": request})
-
-
-@app.get("/admin", response_class=HTMLResponse)
-async def admin_dashboard_page(request: Request):
-    """Admin dashboard page (3D)"""
-    return templates.TemplateResponse("admin_dashboard_3d.html", {"request": request})
-
-
-@app.get("/admin/old", response_class=HTMLResponse)
-async def admin_page_old(request: Request):
-    """Old admin dashboard page"""
-    return templates.TemplateResponse("admin.html", {"request": request})
+# Frontend routes (removed - React frontend handles all UI)
+# All frontend routes are now handled by React Router on http://localhost:3000
 
 
 # Health check endpoint

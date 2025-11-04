@@ -1,11 +1,9 @@
 """
 API routes for admin dashboard and blockchain viewing
 """
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-from backend.database import get_db
+from fastapi import APIRouter
 from backend.blockchain import voting_blockchain
-from backend.models import Candidate
+from backend import database as db
 
 router = APIRouter(prefix="/api", tags=["admin"])
 
@@ -23,7 +21,7 @@ async def get_blockchain():
 
 
 @router.get("/results")
-async def get_results(db: Session = Depends(get_db)):
+async def get_results():
     """
     Get voting results (total votes per candidate)
     """
@@ -31,15 +29,15 @@ async def get_results(db: Session = Depends(get_db)):
     vote_counts = voting_blockchain.get_votes_by_candidate()
     
     # Get candidate details
-    candidates = db.query(Candidate).all()
+    candidates = db.list_candidates()
     
     results = []
     for candidate in candidates:
         results.append({
-            "candidate_id": candidate.candidate_id,
-            "name": candidate.name,
-            "party": candidate.party,
-            "votes": vote_counts.get(candidate.candidate_id, 0)
+            "candidate_id": candidate["candidate_id"],
+            "name": candidate["name"],
+            "party": candidate.get("party"),
+            "votes": vote_counts.get(candidate["candidate_id"], 0)
         })
     
     # Sort by votes (descending)

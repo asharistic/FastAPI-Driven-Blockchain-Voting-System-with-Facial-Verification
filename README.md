@@ -14,67 +14,87 @@ This is a university final year project that demonstrates a complete voting syst
 ## 🛠️ Technology Stack
 
 - **Backend**: FastAPI (Python 3.11)
-- **Database**: SQLite with SQLAlchemy ORM
+- **Database**: SQLite (using sqlite3)
 - **Face Detection**: OpenCV with Haar Cascade classifier
 - **Blockchain**: Custom Python blockchain implementation
-- **Frontend**: HTML, CSS, JavaScript (Vanilla)
-- **Templating**: Jinja2
+- **Frontend**: React 18 with Vite, React Router
+- **Authentication**: JWT tokens
+- **API Communication**: Axios
 
 ## 📂 Project Structure
 
 ```
-blockchain-voting-system/
+FaceVoteChain/
 ├── backend/
 │   ├── main.py              # FastAPI app entry point
-│   ├── models.py            # Database models (Voter, Candidate)
-│   ├── database.py          # SQLite connection setup
+│   ├── database.py          # SQLite database helpers
 │   ├── blockchain.py        # Blockchain implementation
 │   ├── face_utils.py        # Face detection utilities
+│   ├── auth.py              # JWT authentication
 │   ├── routes/
 │   │   ├── voters.py        # Voter registration & verification
 │   │   ├── votes.py         # Voting functionality
-│   │   └── admin.py         # Admin dashboard APIs
-│   ├── templates/           # HTML templates
-│   │   ├── index.html
-│   │   ├── register.html
-│   │   ├── vote.html
-│   │   └── admin.html
-│   └── static/              # CSS and JavaScript
-│       ├── css/
-│       │   └── style.css
-│       └── js/
-│           ├── register.js
-│           ├── vote.js
-│           └── admin.js
+│   │   ├── admin.py         # Admin APIs
+│   │   ├── admin_enhanced.py # Enhanced admin CRUD APIs
+│   │   └── auth.py          # Authentication routes
+│   └── voting_system.db     # SQLite database
+├── Frontend/                # React frontend application
+│   ├── src/
+│   │   ├── pages/           # Page components
+│   │   │   ├── Home.jsx
+│   │   │   ├── Register.jsx
+│   │   │   ├── Vote.jsx
+│   │   │   └── admin/
+│   │   ├── components/      # Reusable components
+│   │   ├── services/        # API service layer
+│   │   └── App.jsx          # Main app component
+│   ├── package.json
+│   └── vite.config.js
 ├── README.md
-└── requirements.txt
+├── requirements.txt         # Python dependencies
+└── start-all.ps1           # Windows startup script
 ```
 
-## 🚀 How to Run
-
-### On Replit (Recommended)
-
-1. The application is already configured to run on Replit
-2. Click the "Run" button at the top of the Replit workspace
-3. The application will start on port 5000
-4. Open the webview to access the application
-
-### Locally
+## 🚀 How to Run Locally (Windows)
 
 1. **Install Python 3.11**
 
-2. **Install dependencies**:
-   ```bash
-   pip install fastapi uvicorn sqlalchemy opencv-python jinja2 python-multipart pillow numpy
+2. **Create and activate a virtual environment**
+   ```powershell
+   cd C:\Users\HP\Downloads\FaceVoteChain
+   python -m venv .venv
+   . .\.venv\Scripts\Activate.ps1
    ```
 
-3. **Run the application**:
-   ```bash
-   uvicorn backend.main:app --host 0.0.0.0 --port 5000 --reload
+3. **Install dependencies**
+   ```powershell
+   pip install --upgrade pip
+   pip install -r requirements.txt
    ```
 
-4. **Access the application**:
-   Open your browser and navigate to `http://localhost:5000`
+4. **(Optional) Use a custom local SQLite database file**
+   - By default, the app uses `backend/voting_system.db`.
+   - To point to a specific path (example: `C:\data\voting_system.db`):
+   ```powershell
+   $env:DATABASE_URL = "sqlite:///C:/data/voting_system.db"
+   ```
+
+5. **Run the backend API server**
+   ```powershell
+   uvicorn backend.main:app --host 127.0.0.1 --port 5000 --reload
+   ```
+
+6. **Setup Frontend (in a new terminal)**
+   ```powershell
+   cd Frontend
+   npm install
+   npm run dev
+   ```
+
+7. **Access the application**
+   - Frontend: Open your browser and navigate to `http://localhost:3000`
+   - Backend API: `http://127.0.0.1:5000`
+   - API Docs: `http://127.0.0.1:5000/docs`
 
 ## 📡 API Endpoints
 
@@ -87,10 +107,39 @@ blockchain-voting-system/
 - `POST /api/vote` - Cast a vote (adds to blockchain)
 - `GET /api/candidates` - Get all candidates
 
-### Admin & Blockchain
-- `GET /api/chain` - View entire blockchain
-- `GET /api/results` - Get voting results
+### Admin & Blockchain (JWT Auth Required)
+- `GET /api/admin/stats` - Get dashboard statistics
+- `GET /api/admin/elections` - Get all elections (CRUD available)
+- `GET /api/admin/candidates` - Get all candidates (CRUD available)
+- `GET /api/admin/voters` - Get all voters
+- `GET /api/admin/blockchain` - View entire blockchain
+- `GET /api/admin/results` - Get voting results
+- `POST /api/auth/login` - Admin login
 - `GET /health` - Health check endpoint
+
+## 🎨 React Frontend
+
+The project includes a modern React frontend in the `Frontend/` directory.
+
+### Start Frontend
+```powershell
+cd Frontend
+npm install
+npm run dev
+```
+
+### Start Both Servers
+```powershell
+# Use the convenience script
+.\start-all.ps1
+
+# Or manually start both servers in separate terminals
+```
+
+Frontend URL: `http://localhost:3000`
+Backend URL: `http://127.0.0.1:5000`
+
+See `Frontend/README.md` and `Frontend/CONNECTION_GUIDE.md` for details.
 
 ## 🎯 How to Use the System
 
