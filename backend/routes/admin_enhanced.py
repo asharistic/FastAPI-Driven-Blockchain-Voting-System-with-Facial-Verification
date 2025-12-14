@@ -88,7 +88,7 @@ async def get_elections():
                 "description": e.get("description"),
                 "start_time": e.get("start_time"),
                 "end_time": e.get("end_time"),
-                "is_active": bool(e.get("is_active", 1)),
+                "is_active": bool(e.get("is_active", False)),
                 "created_at": e.get("created_at")
             }
             for e in elections
@@ -110,7 +110,7 @@ async def update_election(election_id: int, election_data: ElectionUpdate):
     if "end_time" in update_data and isinstance(update_data["end_time"], datetime):
         update_data["end_time"] = update_data["end_time"].isoformat()
     if "is_active" in update_data:
-        update_data["is_active"] = 1 if update_data["is_active"] else 0
+        update_data["is_active"] = bool(update_data["is_active"])
     db.update_election(election_id, update_data)
     return {"success": True, "message": "Election updated successfully"}
 
@@ -123,14 +123,12 @@ async def delete_election(election_id: int):
         raise HTTPException(status_code=404, detail="Election not found")
     
     # Get all candidates associated with this election
-    conn = db.get_connection()
-    candidates = conn.execute("SELECT candidate_id FROM candidates WHERE election_id = ?", (election_id,)).fetchall()
-    conn.close()
+    all_candidates = db.list_candidates()
+    candidates_to_delete = [c["candidate_id"] for c in all_candidates if c.get("election_id") == election_id]
     
     # Delete all associated candidates
     deleted_candidates_count = 0
-    for candidate_row in candidates:
-        candidate_id = candidate_row["candidate_id"]
+    for candidate_id in candidates_to_delete:
         if db.delete_candidate(candidate_id):
             deleted_candidates_count += 1
     
@@ -321,16 +319,14 @@ async def get_voting_results():
 async def get_statistics():
     """Get overall system statistics"""
     total_voters = db.count("voters")
-    voters_who_voted = 0
     # Count voters who voted
-    conn = db.get_connection()
-    voters_who_voted = conn.execute("SELECT COUNT(*) FROM voters WHERE has_voted = 1").fetchone()[0]
-    conn.close()
+    all_voters = db.list_voters()
+    voters_who_voted = sum(1 for v in all_voters if v.get("has_voted", False))
     total_candidates = db.count("candidates")
     total_elections = db.count("elections")
-    conn = db.get_connection()
-    active_elections = conn.execute("SELECT COUNT(*) FROM elections WHERE is_active = 1").fetchone()[0]
-    conn.close()
+    # Count active elections
+    all_elections = db.list_elections()
+    active_elections = sum(1 for e in all_elections if e.get("is_active", False))
     blockchain_blocks = len(voting_blockchain.chain)
     blockchain_valid = voting_blockchain.is_chain_valid()
     

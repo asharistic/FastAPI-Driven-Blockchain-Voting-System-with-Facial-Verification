@@ -1,6 +1,15 @@
 # Script to start both backend and frontend servers
 Write-Host "Starting Blockchain Voting System..." -ForegroundColor Cyan
 
+# Set PostgreSQL database connection
+$env:DATABASE_URL = "postgresql://postgres:1234@localhost:5432/voting_system"
+Write-Host "Database connection configured" -ForegroundColor Green
+
+# Set TensorFlow/Keras environment variables for DeepFace compatibility
+$env:TF_USE_LEGACY_KERAS = "1"
+$env:TF_KERAS = "1"
+Write-Host "TensorFlow/Keras compatibility configured" -ForegroundColor Green
+
 # Check if virtual environment exists
 if (-not (Test-Path ".\.venv")) {
     Write-Host "Virtual environment not found. Creating..." -ForegroundColor Yellow
@@ -9,7 +18,10 @@ if (-not (Test-Path ".\.venv")) {
 
 # Activate virtual environment and start backend
 Write-Host "`nStarting Backend Server..." -ForegroundColor Green
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD'; .\.venv\Scripts\Activate.ps1; Write-Host 'Backend Server Starting...' -ForegroundColor Green; uvicorn backend.main:app --host 127.0.0.1 --port 5000 --reload"
+$dbUrl = $env:DATABASE_URL
+$tfKeras = $env:TF_USE_LEGACY_KERAS
+$tfKeras2 = $env:TF_KERAS
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD'; `$env:DATABASE_URL = '$dbUrl'; `$env:TF_USE_LEGACY_KERAS = '$tfKeras'; `$env:TF_KERAS = '$tfKeras2'; .\.venv\Scripts\Activate.ps1; Write-Host 'Backend Server Starting with DeepFace...' -ForegroundColor Green; uvicorn backend.main:app --host 127.0.0.1 --port 5000 --reload"
 
 # Wait for backend to initialize
 Write-Host "Waiting for backend to start..." -ForegroundColor Yellow

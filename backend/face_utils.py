@@ -1,27 +1,47 @@
 """
-Face detection and verification utilities using OpenCV
+Face detection and verification utilities using DeepFace (FaceNet model)
+Replaces Haar Cascade with deep learning-based face recognition
 """
-import cv2
+import os
+# Set environment variables before importing TensorFlow/Keras
+# This helps with compatibility issues between TensorFlow 2.20.0 and Keras 3.12.0
+os.environ['TF_USE_LEGACY_KERAS'] = '1'
+os.environ['TF_KERAS'] = '1'
+
 import numpy as np
 import base64
+import json
 from io import BytesIO
 from PIL import Image
+from deepface import DeepFace
+from typing import List, Dict, Optional, Tuple
 
-# Load the pre-trained Haar Cascade classifier for face detection
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-# Additional cascade for profile face detection (to reject profile faces)
-# Try to load profile cascade, but continue if not available
-try:
-    profile_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_profileface.xml')
-    PROFILE_CASCADE_AVAILABLE = profile_cascade.empty() == False
-except:
-    PROFILE_CASCADE_AVAILABLE = False
-    profile_cascade = None
+# Configuration: Face verification threshold
+# Lower threshold = stricter matching (default: 0.4 for FaceNet)
+# Distance metric: cosine distance (0 = identical, 1 = completely different)
+FACE_VERIFICATION_THRESHOLD = 0.4
+
+# DeepFace model configuration
+# Using FaceNet model for face recognition
+MODEL_NAME = "Facenet"
+DETECTOR_BACKEND = "opencv"  # Can also use "mtcnn", "retinaface" for better accuracy
+
 
 def base64_to_image(base64_string: str) -> np.ndarray:
-    """Convert base64 string to OpenCV image"""
+    """
+    Convert base64 string to numpy array image
+    
+    Args:
+        base64_string: Base64 encoded image string (with or without data URL prefix)
+    
+    Returns:
+        numpy.ndarray: Image as numpy array in RGB format
+    
+    Raises:
+        ValueError: If image cannot be decoded
+    """
     try:
-        # Remove data URL prefix if present
+        # Remove data URL prefix if present (e.g., "data:image/jpeg;base64,...")
         if ',' in base64_string:
             base64_string = base64_string.split(',')[1]
         
@@ -31,269 +51,273 @@ def base64_to_image(base64_string: str) -> np.ndarray:
         # Convert to PIL Image
         pil_image = Image.open(BytesIO(img_data))
         
-        # Convert to OpenCV format (BGR)
-        opencv_image = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
+        # Convert to RGB if necessary (handles RGBA, L, etc.)
+        if pil_image.mode != 'RGB':
+            pil_image = pil_image.convert('RGB')
         
-        return opencv_image
+        # Convert to numpy array
+        image_array = np.array(pil_image)
+        
+        return image_array
+        
     except Exception as e:
         raise ValueError(f"Error converting base64 to image: {str(e)}")
 
 
-def validate_frontal_face(image: np.ndarray, face_rect: tuple) -> bool:
-    """
-    Validate that the detected face is frontal (not profile/side view)
-    Returns True if face appears to be frontal
-    """
-    (x, y, w, h) = face_rect
-    img_height, img_width = image.shape[:2]
-    
-    # 1. Check aspect ratio - frontal faces should be roughly square (width/height between 0.7 and 1.3)
-    aspect_ratio = w / h
-    if aspect_ratio < 0.7 or aspect_ratio > 1.3:
-        return False
-    
-    # 2. Check face size relative to image - should be reasonably sized (not too small)
-    face_area = w * h
-    image_area = img_width * img_height
-    face_ratio = face_area / image_area
-    if face_ratio < 0.05:  # Face should be at least 5% of image
-        return False
-    
-    # 3. Check face position - should be reasonably centered (not too far to edges)
-    center_x = x + w / 2
-    center_y = y + h / 2
-    margin_x = img_width * 0.15  # 15% margin from edges
-    margin_y = img_height * 0.15
-    
-    if center_x < margin_x or center_x > (img_width - margin_x):
-        return False
-    if center_y < margin_y or center_y > (img_height - margin_y):
-        return False
-    
-    # Convert to grayscale for detection checks
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    
-    # 4. Check for profile face - if profile cascade detects the face, reject it
-    if PROFILE_CASCADE_AVAILABLE and profile_cascade is not None:
-        # Expand search region slightly around detected face
-        expanded_x = max(0, x - w // 4)
-        expanded_y = max(0, y - h // 4)
-        expanded_w = min(img_width - expanded_x, w + w // 2)
-        expanded_h = min(img_height - expanded_y, h + h // 2)
-        
-        roi = gray[expanded_y:expanded_y+expanded_h, expanded_x:expanded_x+expanded_w]
-        
-        if roi.size > 0:
-            # Detect profile faces in the region
-            profile_faces = profile_cascade.detectMultiScale(
-                roi,
-                scaleFactor=1.1,
-                minNeighbors=3,
-                minSize=(max(20, w // 2), max(20, h // 2))
-            )
-            
-            # If profile face is detected with high confidence, reject
-            if len(profile_faces) > 0:
-                # Check if profile face overlaps significantly with frontal face
-                for (px, py, pw, ph) in profile_faces:
-                    # Adjust coordinates to image space
-                    px += expanded_x
-                    py += expanded_y
-                    # Calculate overlap
-                    overlap_x = max(0, min(x + w, px + pw) - max(x, px))
-                    overlap_y = max(0, min(y + h, py + ph) - max(y, py))
-                    overlap_area = overlap_x * overlap_y
-                    face_area = w * h
-                    if overlap_area > face_area * 0.5:  # More than 50% overlap
-                        return False
-    
-    # 5. Additional check: Use stricter frontal face detection parameters
-    # This ensures we only accept well-detected frontal faces
-    strict_faces = face_cascade.detectMultiScale(
-        gray,
-        scaleFactor=1.15,  # Slightly stricter
-        minNeighbors=7,     # Require more neighbors (more confident detection)
-        minSize=(max(50, w - 10), max(50, h - 10)),  # Ensure face size is consistent
-        flags=cv2.CASCADE_SCALE_IMAGE
-    )
-    
-    # Check if the detected face matches our strict detection
-    for (sx, sy, sw, sh) in strict_faces:
-        # Check if rectangles overlap significantly
-        overlap_x = max(0, min(x + w, sx + sw) - max(x, sx))
-        overlap_y = max(0, min(y + h, sy + sh) - max(y, sy))
-        overlap_area = overlap_x * overlap_y
-        min_area = min(w * h, sw * sh)
-        if overlap_area > min_area * 0.7:  # 70% overlap
-            return True
-    
-    # If we get here, the face didn't pass strict detection
-    return False
-
-
 def detect_face(image: np.ndarray) -> bool:
     """
-    Detect if a frontal face is present in the image
-    Returns True if at least one valid frontal face is detected
-    """
-    # Convert to grayscale for face detection
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    Detect if a face is present in the image using DeepFace
     
-    # Detect faces with standard parameters
-    faces = face_cascade.detectMultiScale(
-        gray,
-        scaleFactor=1.1,
-        minNeighbors=5,
-        minSize=(50, 50)  # Increased minimum size for better quality
-    )
+    Args:
+        image: numpy array image in RGB format
     
-    # Validate each detected face is frontal
-    for face in faces:
-        if validate_frontal_face(image, face):
-            return True
+    Returns:
+        bool: True if at least one face is detected, False otherwise
     
-    return False
-
-
-def extract_face_region(image: np.ndarray) -> np.ndarray:
-    """
-    Extract the face region from the image
-    Returns the face region as a numpy array
-    Validates that the face is frontal before extraction
-    """
-    # Convert to grayscale for face detection
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    
-    # Detect faces with stricter parameters
-    faces = face_cascade.detectMultiScale(
-        gray,
-        scaleFactor=1.1,
-        minNeighbors=5,
-        minSize=(50, 50)  # Increased minimum size
-    )
-    
-    if len(faces) == 0:
-        raise ValueError("No face detected in the image. Please ensure your face is clearly visible and facing the camera.")
-    
-    # Find the first valid frontal face
-    valid_face = None
-    for face in faces:
-        if validate_frontal_face(image, face):
-            valid_face = face
-            break
-    
-    if valid_face is None:
-        raise ValueError("No frontal face detected. Please face the camera directly and ensure both eyes are visible. Side/profile poses are not accepted.")
-    
-    # Get the valid face
-    (x, y, w, h) = valid_face
-    
-    # Extract face region
-    face_region = image[y:y+h, x:x+w]
-    
-    # Resize to standard size (100x100) for comparison
-    face_region = cv2.resize(face_region, (100, 100))
-    
-    return face_region
-
-
-def compare_faces(stored_face_bytes: bytes, captured_image: np.ndarray, threshold: float = 0.6) -> bool:
-    """
-    Compare stored face with captured image
-    Returns True if faces match (similarity above threshold)
+    Raises:
+        ValueError: If image processing fails
     """
     try:
-        # Convert stored bytes to image
-        stored_array = np.frombuffer(stored_face_bytes, dtype=np.uint8)
-        stored_image = cv2.imdecode(stored_array, cv2.IMREAD_COLOR)
+        # DeepFace automatically detects faces
+        # If no face is found, it raises an exception
+        result = DeepFace.extract_faces(
+            img_path=image,  # DeepFace uses img_path parameter, accepts numpy array
+            detector_backend=DETECTOR_BACKEND,
+            enforce_detection=True  # Raises exception if no face found
+        )
         
-        if stored_image is None:
-            return False
+        # If we get here, at least one face was detected
+        return len(result) > 0
         
-        # Extract face from captured image
-        captured_face = extract_face_region(captured_image)
+    except ValueError as e:
+        # No face detected
+        if "Face could not be detected" in str(e) or "No face detected" in str(e):
+                        return False
+        raise
+    except Exception as e:
+        raise ValueError(f"Error detecting face: {str(e)}")
+
+
+def generate_face_embedding(image: np.ndarray) -> List[float]:
+    """
+    Generate face embedding vector using DeepFace (FaceNet model)
+    
+    This function:
+    1. Detects face in the image
+    2. Extracts face region
+    3. Generates 128-dimensional embedding vector using FaceNet
+    
+    Args:
+        image: numpy array image in RGB format
+    
+    Returns:
+        List[float]: Face embedding vector (128 dimensions for FaceNet)
+    
+    Raises:
+        ValueError: If no face is detected or embedding generation fails
+    """
+    try:
+        print(f"[DEEPFACE] Generating embedding with model: {MODEL_NAME}, detector: {DETECTOR_BACKEND}")
+        print(f"[DEEPFACE] Image shape: {image.shape}, dtype: {image.dtype}")
         
-        # Resize stored image to same size
-        stored_face = cv2.resize(stored_image, (100, 100))
+        # DeepFace automatically handles face detection and embedding generation
+        # model_name="Facenet" uses FaceNet architecture
+        # Note: First call will download the model (~90MB) which may take 1-2 minutes
+        embedding = DeepFace.represent(
+            img_path=image,  # DeepFace accepts numpy array directly
+            model_name=MODEL_NAME,
+            detector_backend=DETECTOR_BACKEND,
+            enforce_detection=True,  # Raises exception if no face found
+            align=True  # Align face for better accuracy
+        )
         
-        # Convert both to grayscale
-        stored_gray = cv2.cvtColor(stored_face, cv2.COLOR_BGR2GRAY)
-        captured_gray = cv2.cvtColor(captured_face, cv2.COLOR_BGR2GRAY)
+        print(f"[DEEPFACE] Embedding generated. Result type: {type(embedding)}, Length: {len(embedding) if embedding else 0}")
         
-        # Calculate histogram similarity
-        hist_stored = cv2.calcHist([stored_gray], [0], None, [256], [0, 256])
-        hist_captured = cv2.calcHist([captured_gray], [0], None, [256], [0, 256])
+        # DeepFace returns a list of dictionaries (one per detected face)
+        # We take the first face's embedding
+        if not embedding or len(embedding) == 0:
+            raise ValueError("No face embedding could be generated")
         
-        # Normalize histograms
-        hist_stored = cv2.normalize(hist_stored, hist_stored).flatten()
-        hist_captured = cv2.normalize(hist_captured, hist_captured).flatten()
+        # Extract the embedding vector (128 dimensions for FaceNet)
+        embedding_vector = embedding[0]["embedding"]
         
-        # Calculate correlation
-        similarity = cv2.compareHist(hist_stored, hist_captured, cv2.HISTCMP_CORREL)
+        # Convert numpy array to list for JSON serialization
+        if isinstance(embedding_vector, np.ndarray):
+            embedding_vector = embedding_vector.tolist()
         
-        return similarity >= threshold
+        return embedding_vector
+        
+    except ValueError as e:
+        # Re-raise with clearer message
+        error_msg = str(e)
+        if "Face could not be detected" in error_msg or "No face detected" in error_msg:
+            raise ValueError("No face detected in the image. Please ensure your face is clearly visible and facing the camera.")
+        raise ValueError(f"Error generating face embedding: {error_msg}")
+    except Exception as e:
+        # Log the full error for debugging
+        import traceback
+        error_trace = traceback.format_exc()
+        error_msg = str(e)
+        print(f"[DEEPFACE ERROR] Exception in generate_face_embedding: {error_msg}")
+        print(f"[DEEPFACE ERROR] Traceback:\n{error_trace}")
+        
+        # Provide clearer error messages
+        if "Face could not be detected" in error_msg or "No face detected" in error_msg:
+            raise ValueError("No face detected in the image. Please ensure your face is clearly visible and facing the camera.")
+        elif "model" in error_msg.lower() or "download" in error_msg.lower():
+            raise ValueError("Face recognition model is loading. Please wait a moment and try again.")
+        else:
+            raise ValueError(f"Error generating face embedding: {error_msg}")
+
+
+def compare_face_embeddings(embedding1: List[float], embedding2: List[float], threshold: float = FACE_VERIFICATION_THRESHOLD) -> Tuple[bool, float]:
+    """
+    Compare two face embeddings using cosine distance
+    
+    Args:
+        embedding1: First face embedding vector
+        embedding2: Second face embedding vector
+        threshold: Distance threshold for matching (default: 0.4)
+                   Lower = stricter matching
+    
+    Returns:
+        tuple[bool, float]: (is_match, distance)
+        - is_match: True if embeddings match (distance <= threshold)
+        - distance: Cosine distance between embeddings (0 = identical, 1 = completely different)
+    """
+    try:
+        # Convert to numpy arrays for computation
+        emb1 = np.array(embedding1, dtype=np.float32)
+        emb2 = np.array(embedding2, dtype=np.float32)
+        
+        # Ensure same length
+        if len(emb1) != len(emb2):
+            raise ValueError(f"Embedding dimensions mismatch: {len(emb1)} vs {len(emb2)}")
+        
+        # Normalize vectors (L2 normalization)
+        emb1_norm = emb1 / (np.linalg.norm(emb1) + 1e-10)
+        emb2_norm = emb2 / (np.linalg.norm(emb2) + 1e-10)
+        
+        # Calculate cosine similarity (dot product of normalized vectors)
+        cosine_similarity = np.dot(emb1_norm, emb2_norm)
+        
+        # Convert similarity to distance (distance = 1 - similarity)
+        cosine_distance = 1.0 - cosine_similarity
+        
+        # Check if distance is below threshold (lower distance = more similar)
+        is_match = cosine_distance <= threshold
+        
+        return is_match, float(cosine_distance)
         
     except Exception as e:
-        print(f"Error comparing faces: {str(e)}")
-        return False
+        raise ValueError(f"Error comparing embeddings: {str(e)}")
 
 
-def save_face_data(image: np.ndarray) -> bytes:
+def verify_face_with_embedding(live_image: np.ndarray, stored_embedding: List[float], threshold: float = FACE_VERIFICATION_THRESHOLD) -> Tuple[bool, float]:
     """
-    Save face region as bytes for storage in database
-    """
-    face_region = extract_face_region(image)
+    Verify a live face image against a stored embedding
     
-    # Encode as PNG
-    success, encoded_image = cv2.imencode('.png', face_region)
+    This function:
+    1. Generates embedding from live image
+    2. Compares with stored embedding
+    3. Returns match result and distance
     
-    if not success:
-        raise ValueError("Failed to encode face image")
+    Args:
+        live_image: numpy array of live face image
+        stored_embedding: Stored face embedding vector from database
+        threshold: Distance threshold for matching
     
-    return encoded_image.tobytes()
-
-
-def check_duplicate_face(new_face_image: np.ndarray, existing_voters: list[dict], threshold: float = 0.6) -> dict | None:
-    """
-    Check if the new face matches any existing registered face
-    Returns the matching voter dict if found, None otherwise
+    Returns:
+        tuple[bool, float]: (is_match, distance)
     """
     try:
-        new_face = extract_face_region(new_face_image)
-        new_face_resized = cv2.resize(new_face, (100, 100))
-        new_face_gray = cv2.cvtColor(new_face_resized, cv2.COLOR_BGR2GRAY)
-        new_hist = cv2.calcHist([new_face_gray], [0], None, [256], [0, 256])
-        new_hist = cv2.normalize(new_hist, new_hist).flatten()
+        # Generate embedding from live image
+        live_embedding = generate_face_embedding(live_image)
         
+        # Compare embeddings
+        is_match, distance = compare_face_embeddings(live_embedding, stored_embedding, threshold)
+        
+        return is_match, distance
+        
+    except Exception as e:
+        raise ValueError(f"Error verifying face: {str(e)}")
+
+
+def check_duplicate_face(new_face_image: np.ndarray, existing_voters: List[Dict], threshold: float = FACE_VERIFICATION_THRESHOLD) -> Optional[Dict]:
+    """
+    Check if a new face matches any existing registered voter
+    
+    This enforces one-person-one-vote by preventing the same person
+    from registering multiple times with different voter IDs
+    
+    Args:
+        new_face_image: numpy array of new face image
+        existing_voters: List of existing voter dictionaries with face_embedding
+        threshold: Distance threshold for matching
+    
+    Returns:
+        Optional[Dict]: Matching voter dictionary if found, None otherwise
+    """
+    try:
+        # Generate embedding for new face
+        new_embedding = generate_face_embedding(new_face_image)
+        
+        # Compare with all existing voters
         for voter in existing_voters:
-            if not voter.get("face_data"):
+            stored_embedding = voter.get("face_embedding")
+            
+            # Skip if no embedding stored
+            if not stored_embedding:
                 continue
                 
+            # Handle JSONB from PostgreSQL (might be dict or list)
+            if isinstance(stored_embedding, dict):
+                # If stored as JSON object, extract the array
+                stored_embedding = stored_embedding.get("embedding", stored_embedding)
+            elif isinstance(stored_embedding, str):
+                # If stored as JSON string, parse it
+                stored_embedding = json.loads(stored_embedding)
+            
             try:
-                stored_bytes = voter["face_data"]
-                stored_array = np.frombuffer(stored_bytes, dtype=np.uint8)
-                stored_image = cv2.imdecode(stored_array, cv2.IMREAD_COLOR)
+                # Compare embeddings
+                is_match, distance = compare_face_embeddings(new_embedding, stored_embedding, threshold)
                 
-                if stored_image is None:
-                    continue
-                
-                stored_face_resized = cv2.resize(stored_image, (100, 100))
-                stored_face_gray = cv2.cvtColor(stored_face_resized, cv2.COLOR_BGR2GRAY)
-                stored_hist = cv2.calcHist([stored_face_gray], [0], None, [256], [0, 256])
-                stored_hist = cv2.normalize(stored_hist, stored_hist).flatten()
-                
-                # Calculate similarity
-                similarity = cv2.compareHist(new_hist, stored_hist, cv2.HISTCMP_CORREL)
-                
-                if similarity >= threshold:
+                if is_match:
+                    # Found a match - same person already registered
                     return voter
                     
             except Exception as e:
+                # Skip this voter if comparison fails
                 print(f"Error comparing with voter {voter.get('voter_id')}: {str(e)}")
                 continue
         
+        # No match found
         return None
         
     except Exception as e:
-        print(f"Error in check_duplicate_face: {str(e)}")
-        return None
+        raise ValueError(f"Error checking for duplicate face: {str(e)}")
+
+
+def get_verification_threshold() -> float:
+    """
+    Get the current face verification threshold
+    
+    Returns:
+        float: Current threshold value
+    """
+    return FACE_VERIFICATION_THRESHOLD
+
+
+def set_verification_threshold(threshold: float) -> None:
+    """
+    Set the face verification threshold
+    
+    Args:
+        threshold: New threshold value (0.0 to 1.0)
+                  Lower = stricter matching
+                  Recommended: 0.3-0.5 for FaceNet
+    """
+    global FACE_VERIFICATION_THRESHOLD
+    if not 0.0 <= threshold <= 1.0:
+        raise ValueError("Threshold must be between 0.0 and 1.0")
+    FACE_VERIFICATION_THRESHOLD = threshold

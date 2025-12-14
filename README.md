@@ -6,16 +6,16 @@ A secure, transparent voting platform powered by blockchain technology and facia
 
 This is a university final year project that demonstrates a complete voting system with the following features:
 
-- **Voter Registration**: Register voters with facial capture and unique ID
-- **Face Verification**: Verify voter identity using OpenCV face detection before voting
+- **Voter Registration**: Register voters with facial capture and unique ID using DeepFace (FaceNet)
+- **Face Verification**: Verify voter identity using deep learning face recognition (DeepFace FaceNet model)
 - **Blockchain Storage**: Secure vote storage in an immutable blockchain
 - **Admin Dashboard**: View blockchain records, voting results, and voter statistics
 
 ## 🛠️ Technology Stack
 
-- **Backend**: FastAPI (Python 3.11)
-- **Database**: SQLite (using sqlite3)
-- **Face Detection**: OpenCV with Haar Cascade classifier
+- **Backend**: FastAPI (Python 3.11+)
+- **Database**: PostgreSQL (using psycopg)
+- **Face Recognition**: DeepFace with FaceNet model (deep learning)
 - **Blockchain**: Custom Python blockchain implementation
 - **Frontend**: React 18 with Vite, React Router
 - **Authentication**: JWT tokens
@@ -27,7 +27,7 @@ This is a university final year project that demonstrates a complete voting syst
 FaceVoteChain/
 ├── backend/
 │   ├── main.py              # FastAPI app entry point
-│   ├── database.py          # SQLite database helpers
+│   ├── database.py          # PostgreSQL database helpers
 │   ├── blockchain.py        # Blockchain implementation
 │   ├── face_utils.py        # Face detection utilities
 │   ├── auth.py              # JWT authentication
@@ -37,7 +37,7 @@ FaceVoteChain/
 │   │   ├── admin.py         # Admin APIs
 │   │   ├── admin_enhanced.py # Enhanced admin CRUD APIs
 │   │   └── auth.py          # Authentication routes
-│   └── voting_system.db     # SQLite database
+│   └── (PostgreSQL database - external)
 ├── Frontend/                # React frontend application
 │   ├── src/
 │   │   ├── pages/           # Page components
@@ -66,30 +66,44 @@ FaceVoteChain/
    . .\.venv\Scripts\Activate.ps1
    ```
 
-3. **Install dependencies**
+3. **Install PostgreSQL**
+   - Download and install PostgreSQL from https://www.postgresql.org/download/
+   - Create a database named `voting_system` (or your preferred name)
+   - Note your PostgreSQL username, password, host, and port (default port is 5432)
+
+4. **Set up database connection**
+   - The `start-all.ps1` script automatically sets the DATABASE_URL
+   - If running manually, set the environment variable:
+   ```powershell
+   $env:DATABASE_URL = "postgresql://postgres:YOUR_PASSWORD@localhost:5432/voting_system"
+   ```
+   - Replace `YOUR_PASSWORD` with your PostgreSQL password
+   - The database tables will be created automatically on first run
+
+5. **Install dependencies**
    ```powershell
    pip install --upgrade pip
    pip install -r requirements.txt
    ```
 
-4. **(Optional) Use a custom local SQLite database file**
-   - By default, the app uses `backend/voting_system.db`.
-   - To point to a specific path (example: `C:\data\voting_system.db`):
-   ```powershell
-   $env:DATABASE_URL = "sqlite:///C:/data/voting_system.db"
-   ```
-
-5. **Run the backend API server**
-   ```powershell
-   uvicorn backend.main:app --host 127.0.0.1 --port 5000 --reload
-   ```
-
-6. **Setup Frontend (in a new terminal)**
-   ```powershell
-   cd Frontend
-   npm install
-   npm run dev
-   ```
+6. **Run the application**
+   - **Option 1: Use the start script (recommended)**
+     ```powershell
+     .\start-all.ps1
+     ```
+     This will start both backend and frontend servers automatically.
+   
+   - **Option 2: Run manually**
+     ```powershell
+     # Terminal 1 - Backend
+     $env:DATABASE_URL = "postgresql://postgres:YOUR_PASSWORD@localhost:5432/voting_system"
+     uvicorn backend.main:app --host 127.0.0.1 --port 5000 --reload
+     
+     # Terminal 2 - Frontend
+     cd Frontend
+     npm install  # Only needed first time
+     npm run dev
+     ```
 
 7. **Access the application**
    - Frontend: Open your browser and navigate to `http://localhost:3000`
@@ -199,7 +213,7 @@ The system comes pre-loaded with 4 sample candidates:
 
 This project is designed for educational purposes and demonstrates:
 - FastAPI web framework development
-- Database design with SQLite3
+- Database design with PostgreSQL
 - Blockchain implementation in Python
 - Face detection with OpenCV
 - RESTful API design

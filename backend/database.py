@@ -1,111 +1,111 @@
 import os
-import sqlite3
+import psycopg
+from psycopg.rows import dict_row
 from datetime import datetime
+from contextlib import contextmanager
 
-# Database URL (path) handling
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./backend/voting_system.db")
-
-
-def _extract_sqlite_path(url: str) -> str:
-    # Expect formats like sqlite:///C:/path/db.sqlite or sqlite:///./backend/voting_system.db
-    if not url.startswith("sqlite:///"):
-        # Fallback to file path as-is
-        return url
-    return url.replace("sqlite:///", "")
+# Database URL - PostgreSQL connection string
+# Format: postgresql://user:password@host:port/database
+# Example: postgresql://postgres:password@localhost:5432/voting_system
+DATABASE_URL = os.getenv(
+    "DATABASE_URL", 
+    "postgresql://postgres:postgres@localhost:5432/voting_system"
+)
 
 
-DB_PATH = _extract_sqlite_path(DATABASE_URL)
-
-
-def get_connection() -> sqlite3.Connection:
-    # Ensure parent directory exists for the SQLite file path
-    parent_dir = os.path.dirname(DB_PATH)
-    if parent_dir and not os.path.exists(parent_dir):
-        os.makedirs(parent_dir, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+@contextmanager
+def get_connection():
+    """Context manager for database connections"""
+    conn = psycopg.connect(DATABASE_URL)
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def init_db() -> None:
-    conn = get_connection()
-    cur = conn.cursor()
-    # Create tables if not exist
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS elections (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            description TEXT,
-            start_time TEXT NOT NULL,
-            end_time TEXT NOT NULL,
-            is_active INTEGER DEFAULT 1,
-            created_at TEXT
+    """Initialize database tables"""
+    with get_connection() as conn:
+        cur = conn.cursor()
+        # Create tables if not exist
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS elections (
+                id SERIAL PRIMARY KEY,
+                title VARCHAR(255) NOT NULL,
+                description TEXT,
+                start_time TIMESTAMP NOT NULL,
+                end_time TIMESTAMP NOT NULL,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
         )
-        """
-    )
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS voters (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            voter_id TEXT UNIQUE NOT NULL,
-            name TEXT NOT NULL,
-            face_data BLOB,
-            has_voted INTEGER DEFAULT 0,
-            registered_at TEXT
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS voters (
+                id SERIAL PRIMARY KEY,
+                voter_id VARCHAR(255) UNIQUE NOT NULL,
+                name VARCHAR(255) NOT NULL,
+                face_embedding JSONB,
+                has_voted BOOLEAN DEFAULT FALSE,
+                registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
         )
-        """
-    )
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS candidates (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            candidate_id TEXT UNIQUE NOT NULL,
-            name TEXT NOT NULL,
-            party TEXT,
-            election_id INTEGER,
-            image_url TEXT,
-            bio TEXT
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS candidates (
+                id SERIAL PRIMARY KEY,
+                candidate_id VARCHAR(255) UNIQUE NOT NULL,
+                name VARCHAR(255) NOT NULL,
+                party VARCHAR(255),
+                election_id INTEGER,
+                image_url TEXT,
+                bio TEXT
+            )
+            """
         )
-        """
-    )
-    conn.commit()
-    conn.close()
+        conn.commit()
 
 
 # ---------- Candidate helpers ----------
 def list_candidates() -> list[dict]:
-    conn = get_connection()
-    rows = conn.execute("SELECT candidate_id, name, party, election_id, image_url, bio FROM candidates").fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    with get_connection() as conn:
+        cur = conn.cursor(row_factory=dict_row)
+        cur.execute("SELECT candidate_id, name, party, election_id, image_url, bio FROM candidates")
+        rows = cur.fetchall()
+        return [dict(r) for r in rows]
 
 
 def get_candidate_by_candidate_id(candidate_id: str) -> dict | None:
-    conn = get_connection()
-    row = conn.execute("SELECT * FROM candidates WHERE candidate_id = ?", (candidate_id,)).fetchone()
-    conn.close()
-    if row:
-        # Convert sqlite3.Row to dict with proper key access
-        return {key: row[key] for key in row.keys()}
-    return None
+    with get_connection() as conn:
+        cur = conn.cursor(row_factory=dict_row)
+        cur.execute("SELECT * FROM candidates WHERE candidate_id = %s", (candidate_id,))
+        row = cur.fetchone()
+        if row:
+            return dict(row)
+        return None
 
 
 def create_candidate(candidate: dict) -> None:
-    conn = get_connection()
-    conn.execute(
-        "INSERT INTO candidates (candidate_id, name, party, election_id, image_url, bio) VALUES (?, ?, ?, ?, ?, ?)",
-        (
-            candidate.get("candidate_id"),
-            candidate.get("name"),
-            candidate.get("party"),
-            candidate.get("election_id"),
-            candidate.get("image_url"),
-            candidate.get("bio"),
-        ),
-    )
-    conn.commit()
-    conn.close()
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO candidates (candidate_id, name, party, election_id, image_url, bio) VALUES (%s, %s, %s, %s, %s, %s)",
+            (
+                candidate.get("candidate_id"),
+                candidate.get("name"),
+                candidate.get("party"),
+                candidate.get("election_id"),
+                candidate.get("image_url"),
+                candidate.get("bio"),
+            ),
+        )
 
 
 def update_candidate(candidate_id: str, fields: dict) -> bool:
@@ -113,63 +113,68 @@ def update_candidate(candidate_id: str, fields: dict) -> bool:
         return True
     keys = list(fields.keys())
     values = [fields[k] for k in keys]
-    set_clause = ", ".join([f"{k} = ?" for k in keys])
-    conn = get_connection()
-    cur = conn.execute(f"UPDATE candidates SET {set_clause} WHERE candidate_id = ?", (*values, candidate_id))
-    conn.commit()
-    conn.close()
-    return cur.rowcount > 0
+    set_clause = ", ".join([f"{k} = %s" for k in keys])
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(f"UPDATE candidates SET {set_clause} WHERE candidate_id = %s", (*values, candidate_id))
+        return cur.rowcount > 0
 
 
 def delete_candidate(candidate_id: str) -> bool:
-    conn = get_connection()
-    cur = conn.execute("DELETE FROM candidates WHERE candidate_id = ?", (candidate_id,))
-    conn.commit()
-    conn.close()
-    return cur.rowcount > 0
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM candidates WHERE candidate_id = %s", (candidate_id,))
+        return cur.rowcount > 0
 
 
 # ---------- Voter helpers ----------
 def list_voters() -> list[dict]:
-    conn = get_connection()
-    rows = conn.execute("SELECT voter_id, name, has_voted, registered_at FROM voters").fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    with get_connection() as conn:
+        cur = conn.cursor(row_factory=dict_row)
+        cur.execute("SELECT voter_id, name, has_voted, registered_at FROM voters")
+        rows = cur.fetchall()
+        return [dict(r) for r in rows]
 
 
 def list_voters_with_faces() -> list[dict]:
-    """Get all voters with their face data (for face comparison)"""
-    conn = get_connection()
-    rows = conn.execute("SELECT voter_id, name, face_data, has_voted FROM voters WHERE face_data IS NOT NULL").fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    """Get all voters with their face embeddings (for face comparison)"""
+    with get_connection() as conn:
+        cur = conn.cursor(row_factory=dict_row)
+        cur.execute("SELECT voter_id, name, face_embedding, has_voted FROM voters WHERE face_embedding IS NOT NULL")
+        rows = cur.fetchall()
+        return [dict(r) for r in rows]
 
 
 def get_voter_by_voter_id(voter_id: str) -> dict | None:
-    conn = get_connection()
-    row = conn.execute("SELECT * FROM voters WHERE voter_id = ?", (voter_id,)).fetchone()
-    conn.close()
-    if row:
-        # Convert sqlite3.Row to dict with proper key access
-        return {key: row[key] for key in row.keys()}
-    return None
+    with get_connection() as conn:
+        cur = conn.cursor(row_factory=dict_row)
+        cur.execute("SELECT * FROM voters WHERE voter_id = %s", (voter_id,))
+        row = cur.fetchone()
+        if row:
+            return dict(row)
+        return None
 
 
-def create_voter(voter_id: str, name: str, face_data: bytes | None) -> None:
-    conn = get_connection()
-    conn.execute(
-        "INSERT INTO voters (voter_id, name, face_data, has_voted, registered_at) VALUES (?, ?, ?, 0, ?)",
-        (voter_id, name, face_data, datetime.utcnow().isoformat()),
-    )
-    conn.commit()
-    conn.close()
+def create_voter(voter_id: str, name: str, face_embedding: list | None) -> None:
+    """
+    Create a new voter with face embedding
+    face_embedding: List of floats representing the face embedding vector
+    """
+    import json
+    with get_connection() as conn:
+        cur = conn.cursor()
+        # Convert embedding list to JSON for storage in JSONB column
+        embedding_json = json.dumps(face_embedding) if face_embedding else None
+        cur.execute(
+            "INSERT INTO voters (voter_id, name, face_embedding, has_voted, registered_at) VALUES (%s, %s, %s::jsonb, %s, %s)",
+            (voter_id, name, embedding_json, False, datetime.utcnow()),
+        )
 
 
 def set_voter_has_voted(voter_id: str) -> None:
-    conn = get_connection()
-    conn.execute("UPDATE voters SET has_voted = 1 WHERE voter_id = ?", (voter_id,))
-    conn.commit()
-    conn.close()
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("UPDATE voters SET has_voted = TRUE WHERE voter_id = %s", (voter_id,))
 
 
 def update_voter(voter_id: str, fields: dict) -> bool:
@@ -177,58 +182,55 @@ def update_voter(voter_id: str, fields: dict) -> bool:
         return True
     keys = list(fields.keys())
     values = [fields[k] for k in keys]
-    set_clause = ", ".join([f"{k} = ?" for k in keys])
-    conn = get_connection()
-    cur = conn.execute(f"UPDATE voters SET {set_clause} WHERE voter_id = ?", (*values, voter_id))
-    conn.commit()
-    conn.close()
-    return cur.rowcount > 0
+    set_clause = ", ".join([f"{k} = %s" for k in keys])
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(f"UPDATE voters SET {set_clause} WHERE voter_id = %s", (*values, voter_id))
+        return cur.rowcount > 0
 
 
 def delete_voter(voter_id: str) -> bool:
-    conn = get_connection()
-    cur = conn.execute("DELETE FROM voters WHERE voter_id = ?", (voter_id,))
-    conn.commit()
-    conn.close()
-    return cur.rowcount > 0
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM voters WHERE voter_id = %s", (voter_id,))
+        return cur.rowcount > 0
 
 
 # ---------- Election helpers ----------
 def create_election(election: dict) -> int:
-    conn = get_connection()
-    cur = conn.execute(
-        "INSERT INTO elections (title, description, start_time, end_time, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-        (
-            election.get("title"),
-            election.get("description"),
-            election.get("start_time"),
-            election.get("end_time"),
-            1 if election.get("is_active", True) else 0,
-            datetime.utcnow().isoformat(),
-        ),
-    )
-    conn.commit()
-    new_id = cur.lastrowid
-    conn.close()
-    return new_id
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO elections (title, description, start_time, end_time, is_active, created_at) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+            (
+                election.get("title"),
+                election.get("description"),
+                election.get("start_time"),
+                election.get("end_time"),
+                election.get("is_active", True),
+                datetime.utcnow(),
+            ),
+        )
+        new_id = cur.fetchone()[0]
+        return new_id
 
 
 def list_elections() -> list[dict]:
-    conn = get_connection()
-    rows = conn.execute("SELECT * FROM elections").fetchall()
-    conn.close()
-    # Convert booleans and datetime strings consistently
-    return [dict(r) for r in rows]
+    with get_connection() as conn:
+        cur = conn.cursor(row_factory=dict_row)
+        cur.execute("SELECT * FROM elections")
+        rows = cur.fetchall()
+        return [dict(r) for r in rows]
 
 
 def get_election_by_id(election_id: int) -> dict | None:
-    conn = get_connection()
-    row = conn.execute("SELECT * FROM elections WHERE id = ?", (election_id,)).fetchone()
-    conn.close()
-    if row:
-        # Convert sqlite3.Row to dict with proper key access
-        return {key: row[key] for key in row.keys()}
-    return None
+    with get_connection() as conn:
+        cur = conn.cursor(row_factory=dict_row)
+        cur.execute("SELECT * FROM elections WHERE id = %s", (election_id,))
+        row = cur.fetchone()
+        if row:
+            return dict(row)
+        return None
 
 
 def update_election(election_id: int, fields: dict) -> bool:
@@ -236,25 +238,25 @@ def update_election(election_id: int, fields: dict) -> bool:
         return True
     keys = list(fields.keys())
     values = [fields[k] for k in keys]
-    set_clause = ", ".join([f"{k} = ?" for k in keys])
-    conn = get_connection()
-    cur = conn.execute(f"UPDATE elections SET {set_clause} WHERE id = ?", (*values, election_id))
-    conn.commit()
-    conn.close()
-    return cur.rowcount > 0
+    set_clause = ", ".join([f"{k} = %s" for k in keys])
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(f"UPDATE elections SET {set_clause} WHERE id = %s", (*values, election_id))
+        return cur.rowcount > 0
 
 
 def delete_election(election_id: int) -> bool:
-    conn = get_connection()
-    cur = conn.execute("DELETE FROM elections WHERE id = ?", (election_id,))
-    conn.commit()
-    conn.close()
-    return cur.rowcount > 0
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM elections WHERE id = %s", (election_id,))
+        return cur.rowcount > 0
 
 
 # ---------- Stats helpers ----------
 def count(table: str) -> int:
-    conn = get_connection()
-    row = conn.execute(f"SELECT COUNT(*) as c FROM {table}").fetchone()
-    conn.close()
-    return int(row[0]) if row else 0
+    with get_connection() as conn:
+        cur = conn.cursor()
+        # Use parameterized query to prevent SQL injection
+        cur.execute(f"SELECT COUNT(*) as c FROM {table}")
+        row = cur.fetchone()
+        return int(row[0]) if row else 0
